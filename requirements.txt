@@ -1,0 +1,13 @@
+MetaTrader5
+pandas
+pandas-ta-classic
+numpy
+xgboost
+scikit-learn
+torch
+pytorch-forecasting
+lightning
+matplotlib
+yfinance
+plotly
+streamlit
