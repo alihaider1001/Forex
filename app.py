@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import time
 import xgboost as xgb
 import plotly.graph_objects as go
 import torch
@@ -25,6 +26,16 @@ st.markdown("Automated algorithmic trading analytics powered by **XGBoost** and 
 st.sidebar.header("Trading Configuration")
 
 data_source = st.sidebar.radio("Data Source", ["Local CSV", "Live Yahoo Finance"])
+
+st.sidebar.warning(
+    "⚠️ **Note:** These AI models are specifically trained on 7 European indices "
+    "(DE40, FRA40, UK100, EUSTX50, ESP35, IT40, SWI20). Uploading data for other "
+    "assets may produce unreliable forecasts."
+)
+
+uploaded_file = None
+if data_source == "Local CSV":
+    uploaded_file = st.sidebar.file_uploader("Upload market data CSV", type=["csv"])
 
 selected_index = st.sidebar.selectbox(
     "Select European Index", 
@@ -61,7 +72,7 @@ with st.sidebar.expander("💡 Which model should I choose?"):
 run_prediction = st.sidebar.button("Generate Forecast", use_container_width=True)
 
 live_ticker_map = {
-    "IT40": "^FTSEMIB.MI",
+    "IT40": "FTSEMIB.MI",
     "DE40": "^GDAXI",
     "UK100": "^FTSE",
     "SWI20": "^SSMI",
@@ -72,16 +83,25 @@ live_ticker_map = {
 
 @st.cache_data(ttl=60)
 def fetch_live_data(ticker, interval):
-    period = "60d" if interval in {"5m", "15m", "30m"} else "2y"
-    live_df = yf.download(
-        ticker,
-        period=period,
-        interval=interval,
-        auto_adjust=False,
-        progress=False,
-    )
+    intraday_intervals = {"1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "2h", "4h"}
+    is_intraday = interval.lower() in intraday_intervals
+    periods = ["60d", "30d"] if is_intraday else ["2y"]
+    live_df = pd.DataFrame()
+    for period in periods:
+        live_df = yf.download(
+            ticker,
+            period=period,
+            interval=interval,
+            auto_adjust=False,
+            progress=False,
+        )
+        if not live_df.empty:
+            break
+        if is_intraday and period != periods[-1]:
+            time.sleep(1)
+
     if live_df.empty:
-        raise ValueError(f"Yahoo Finance returned no data for {ticker}.")
+        return live_df
     if isinstance(live_df.columns, pd.MultiIndex):
         live_df.columns = live_df.columns.get_level_values(0)
     live_df = live_df.reset_index()
@@ -110,6 +130,12 @@ if run_prediction and data_source == "Live Yahoo Finance":
 
     try:
         raw_live_data = fetch_live_data(live_ticker_map[live_symbol], interval_map[timeframe])
+        if raw_live_data.empty:
+            st.error(
+                f"Yahoo Finance returned no data for {live_ticker_map[live_symbol]} "
+                f"using the {timeframe} interval. Try another index or timeframe."
+            )
+            st.stop()
         live_data = generate_live_features(raw_live_data.copy())
     except Exception as error:
         st.error(f"Could not prepare live market data: {error}")
@@ -159,6 +185,7 @@ if run_prediction and data_source == "Live Yahoo Finance":
             try:
                 live_tft = TemporalFusionTransformer.load_from_checkpoint(model_file)
                 live_lookback = live_data.tail(70).copy().reset_index(drop=True)
+                live_lookback.columns = [str(column).replace(".", "_") for column in live_lookback.columns]
                 live_lookback["time_idx"] = np.arange(len(live_lookback))
                 live_lookback["symbol"] = live_symbol
                 known_reals = ["rsi_14", "atr_14", "sma_50", "ema_20", "return_lag_1", "return_lag_5"]
@@ -199,13 +226,21 @@ if run_prediction and data_source == "Live Yahoo Finance":
                 st.error(f"Live TFT inference failed: {error}")
 
 elif run_prediction:
-    file_path = find_data_file(selected_index, timeframe)
+    file_path = None if uploaded_file is not None else find_data_file(selected_index, timeframe)
     
-    if not file_path:
+    if uploaded_file is None and not file_path:
         st.error(f"Data file for **{selected_index} ({timeframe})** not found. Ensure the CSV files are in the working directory.")
     else:
         # Load and clean historical data
-        df = pd.read_csv(file_path)
+        df = pd.read_csv(uploaded_file if uploaded_file is not None else file_path)
+
+        if uploaded_file is not None:
+            try:
+                df.columns = [str(column).lower() for column in df.columns]
+                df = generate_live_features(df)
+            except Exception as error:
+                st.error(f"Could not prepare uploaded market data: {error}")
+                st.stop()
 
         # Only rename columns if TFT is running; XGBoost needs the original periods.
         if "TFT" in model_choice:

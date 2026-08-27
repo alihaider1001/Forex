@@ -36,4 +36,5 @@ def generate_live_features(df):
         features[f"return_lag_{lag}"] = features["close"].pct_change(lag)
         features[f"close_lag_{lag}"] = features["close"].shift(lag)
 
-    return features.dropna().reset_index(drop=True)
+    features = features.dropna().reset_index(drop=True)
+    return features

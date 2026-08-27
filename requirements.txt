@@ -1,10 +1,11 @@
 MetaTrader5
 pandas
 pandas-ta-classic
-numpy
+numpy<2.4
 xgboost
 scikit-learn
 torch
+onnxruntime
 pytorch-forecasting
 lightning
 matplotlib
