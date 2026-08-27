@@ -30,7 +30,7 @@ Custom CSV uploads can contain other assets, but predictions outside the trainin
 ## Requirements
 
 - Windows, macOS, or Linux
-- Python 3.10 or newer
+- Python 3.10 through 3.13 (`pandas-ta` currently does not support Python 3.14)
 - Internet access for live Yahoo Finance data
 
 ## Installation
