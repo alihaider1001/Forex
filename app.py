@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import os
 import time
 import xgboost as xgb
@@ -281,19 +280,35 @@ elif run_prediction:
                 
                 # Plot Historical Context + Next Point
                 recent_df = df.tail(50).copy().reset_index(drop=True)
-                fig, ax = plt.subplots(figsize=(12, 5))
-                
-                ax.plot(recent_df.index, recent_df['close'], label="Historical Close", color="#1f77b4", linewidth=2)
-                ax.scatter(len(recent_df), predicted_price, color="green" if delta_price > 0 else "red", s=100, zorder=5, label="XGBoost Target")
-                ax.plot([len(recent_df)-1, len(recent_df)], [current_price, predicted_price], color="gray", linestyle="--")
-                
-                ax.set_title(f"{selected_index} ({timeframe}) — XGBoost 1-Step Ahead Forecast", fontsize=14)
-                ax.set_xlabel("Recent Bars")
-                ax.set_ylabel("Price")
-                ax.grid(True, linestyle="--", alpha=0.5)
-                ax.legend()
-                
-                st.pyplot(fig)
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=list(recent_df.index),
+                    y=recent_df["close"],
+                    mode="lines",
+                    name="Historical Close",
+                    line=dict(color="#1f77b4", width=2),
+                ))
+                fig.add_trace(go.Scatter(
+                    x=[len(recent_df)],
+                    y=[predicted_price],
+                    mode="markers",
+                    name="XGBoost Target",
+                    marker=dict(color="green" if delta_price > 0 else "red", size=10),
+                ))
+                fig.add_trace(go.Scatter(
+                    x=[len(recent_df) - 1, len(recent_df)],
+                    y=[current_price, predicted_price],
+                    mode="lines",
+                    name="Forecast Direction",
+                    line=dict(color="gray", dash="dash"),
+                ))
+                fig.update_layout(
+                    title=f"{selected_index} ({timeframe}) - XGBoost 1-Step Ahead Forecast",
+                    xaxis_title="Recent Bars",
+                    yaxis_title="Price",
+                    height=450,
+                )
+                st.plotly_chart(fig, use_container_width=True)
                 st.success("XGBoost single-step prediction generated successfully.")
 
         # ---------------------------------------------------------
@@ -362,19 +377,30 @@ elif run_prediction:
                     past_x = np.arange(-len(past_prices) + 1, 1)
                     future_x = np.arange(1, len(forecast_path) + 1)
                     
-                    fig, ax = plt.subplots(figsize=(12, 5))
-                    ax.plot(past_x, past_prices, label="Historical Price (Lookback)", color="black", linewidth=2)
-                    ax.plot(future_x, forecast_path, label="TFT Predicted Path (Median)", color="#0052cc", linestyle="--", linewidth=2)
-                    ax.scatter(future_x, forecast_path, color="#0052cc", s=40)
-                    
-                    ax.axvline(0, color="gray", linestyle=":", alpha=0.7)
-                    ax.set_title(f"{selected_index} ({timeframe}) — TFT Multi-Horizon Forecast (10 Steps)", fontsize=14)
-                    ax.set_xlabel("Time Horizons")
-                    ax.set_ylabel("Price")
-                    ax.grid(True, linestyle="--", alpha=0.5)
-                    ax.legend()
-                    
-                    st.pyplot(fig)
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=past_x,
+                        y=past_prices,
+                        mode="lines",
+                        name="Historical Price (Lookback)",
+                        line=dict(color="black", width=2),
+                    ))
+                    fig.add_trace(go.Scatter(
+                        x=future_x,
+                        y=forecast_path,
+                        mode="lines+markers",
+                        name="TFT Predicted Path (Median)",
+                        line=dict(color="#0052cc", dash="dash", width=2),
+                        marker=dict(color="#0052cc", size=7),
+                    ))
+                    fig.add_vline(x=0, line=dict(color="gray", dash="dot"))
+                    fig.update_layout(
+                        title=f"{selected_index} ({timeframe}) - TFT Multi-Horizon Forecast (10 Steps)",
+                        xaxis_title="Time Horizons",
+                        yaxis_title="Price",
+                        height=450,
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
                     st.success("TFT multi-horizon trajectory generated successfully.")
                     
                 except Exception as e:
